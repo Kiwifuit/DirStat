@@ -1,0 +1,4 @@
+# Have to remove the dist folder
+# Check the Releases tab for windows executables and .pyc files
+
+dist/**
