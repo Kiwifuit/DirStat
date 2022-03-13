@@ -1,66 +1,54 @@
-from sys import argv
-from glob import iglob
-from os import chdir, path, sep
-from tabulate import tabulate
+from sqlite3 import connect, OperationalError
+from pathlib import Path
 
-if len(argv) == 1:
-    raise SystemExit("! No path Specified")
-    # Walrus operator (:=) to assign variables on conditionals.
-    # Very neat feature if I were to say so myself
-    # Also the variable becomes a global in this instance...
-elif path.isdir((searchPath := path.abspath(argv[1]).replace(sep, "/"))):
-    print(f" * Changing directory to {searchPath!r}")
-    chdir(searchPath)
-    print(
-        " * Listing Directories. This might take a while if the folder contains a lot of files"
-    )
+class SQLDatabase:
+    def __init__(self, database:str|Path=":memory:"):
+        self.database = database
 
-    fileExtensions = {}
+    def __enter__(self):
+        self.connection = connect(self.database)
+        self.cursor = self.connection.cursor()
+        return self.cursor
 
-    # I'm gonna add a sorting feature so that's what this variable is for
-    # Might change it
-    noext = 0
-    dirSize = 0
-    modifier = "Bytes"
+    def __exit__(self, *args):
+        self.connection.commit()
+        self.connection.close()
 
-    # Using "iglob()" instead of the normal "glob()" to reduce
-    # Waiting time since "iglob()" is a generator
-    for file in iglob("**", recursive=True):
-        if path.isfile(file):
-            dirSize += path.getsize(file)
-            file = file.split(sep)[-1].split(".")
-            if len(file) == 1:
-                # fileExtensions["No Extension"] += 1
-                noext += 1
-            else:
-                # This could be optimized, not sure how
-                # It's just my intuition
-                fileExtensions[f"*.{file[-1]}"] = (
-                    fileExtensions[f"*.{file[-1]}"] + 1
-                    if f"*.{file[-1]}" in fileExtensions.keys()
-                    else 1
-                )
-    if len(str(dirSize)) >= 10:
-        dirSize = round(dirSize / 1073741824, 2)
-        modifier = "Gigabytes"
-    fileExtensions = dict(sorted(fileExtensions.items(), key=lambda item: item[0]))
-    # Might remove this. I dunno
-    fileExtensions.update(
-        {
-            "All Files": sum(fileExtensions.values()),
-            "No Extension": noext,
-            "Directory Size": str(dirSize) + f" {modifier}",
-        }
-    )
-    print(
-        tabulate(
-            [[name, count] for name, count in fileExtensions.items()],
-            headers=["Extension", "Frequency"],
-            showindex=True,
-            tablefmt="orgtbl",
-        )
-    )
 
-else:
-    # ...so it can be used here!
-    raise SystemExit(f" ! {searchPath!r} is not a valid path")
+def main(searchdir:Path, pattern:str, recurse:bool):
+    with SQLDatabase() as cur:
+        cur.execute("create table extensions (extension text, count int)")
+
+        # Writing
+        for path in (searchdir.absolute().rglob(pattern)
+                     if recurse else
+                     searchdir.glob(pattern)):
+            res = cur.execute("select * from extensions where extension = ?", (path.suffix,)).fetchall()
+            
+            if res:
+                ext, count = res[0]
+                cur.execute("update extensions set count = ? where extension = ?", (count + 1, ext or path.name))
+
+                continue
+            
+            cur.execute("insert into extensions values (?, 1)", (path.suffix or path.name,))
+
+        # Reading
+        for ext, count in cur.execute("select * from extensions order by count"):
+            print(ext, count)
+
+def verifyArgs(args) -> bool:
+    return args.dir.is_dir()
+
+if __name__ == "__main__":
+    from argparse import ArgumentParser
+
+    parser = ArgumentParser()
+    parser.add_argument("dir", type=Path, help="Directory to search")
+    parser.add_argument("-p", "--pattern", default="*", help="Glob pattern to use when searching 'dir'. '*' by default")
+    parser.add_argument("-r", "--recursive", action="store_true", help="Makes the program go down folders. Off by default")
+
+    args = parser.parse_args()
+
+    if verifyArgs(args):
+        main(args.dir, args.pattern, args.recursive)
