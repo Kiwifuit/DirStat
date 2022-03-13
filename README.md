@@ -17,11 +17,19 @@ dirstat.exe <directory>
 Where `directory` is the directory you want to get info from
 
 # Changes Coming
-- Add Support for multiple directories
+* Add Support for multiple directories
+* Probs comment the fuck out of the file
+* Split up `main`'s update/append functionality into their own functions
+* Prettify the output
 
 # Changelog
-- 0.0.1
-    - Published to Github
+* 1.0.0
+   * Rewrote the entire program
+   * Used SQLite for keeping track of the data instead of a dict
+   * Used `argparse` to handle arguments and make the program a wee more feature-rich
+
+* 0.0.1
+   * Published to Github
 # License
 MIT License
 
